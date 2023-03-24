@@ -77,11 +77,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut mounts = args.mounts.unwrap_or_default();
     mounts.push(format!("{}:/tmp", current_dir));
 
-    log::debug!("{:?}", mounts);
-
     let container_opts = ContainerCreateOpts::builder()
         .image(args.image)
         .volumes(mounts)
+        .working_dir("/tmp")
         .command(args.command)
         .build();
 
@@ -91,35 +90,34 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .expect("Failed to create container");
 
-    let res = container.start().await;
-    match res {
-        Ok(_) => println!("Started container"),
-        Err(e) => println!("Failed to start container: {}", e),
-    }
+    container.start().await?;
 
-    let mut logs = container.logs(&LogsOpts::builder().stdout(true).stderr(true).build());
-    while let Some(s) = logs.next().await {
-        match s {
-            Ok(s) => {
-                let log = match s {
-                    docker_api::conn::TtyChunk::StdOut(s) => s,
-                    docker_api::conn::TtyChunk::StdErr(e) => e,
-                    docker_api::conn::TtyChunk::StdIn(e) => e,
-                };
+    log::debug!("Started container");
 
-                let log = String::from_utf8(log).expect("Failed to convert to utf8");
+    let mut logs = container.logs(
+        &LogsOpts::builder()
+            .follow(true)
+            .stdout(true)
+            .stderr(true)
+            .build(),
+    );
+    while let Some(logs) = logs.next().await {
+        let log = match logs? {
+            docker_api::conn::TtyChunk::StdOut(s) => s,
+            docker_api::conn::TtyChunk::StdErr(e) => e,
+            docker_api::conn::TtyChunk::StdIn(e) => e,
+        };
 
-                print!("{}", log)
-            }
-            Err(e) => println!("Failed to get log: {}", e),
-        }
+        print!(
+            "{}",
+            String::from_utf8(log).expect("Failed to convert to utf8")
+        );
     }
 
     container
         .wait()
         .await
         .expect("Failed to wait for container");
-
 
     container.remove(&Default::default()).await?;
 
