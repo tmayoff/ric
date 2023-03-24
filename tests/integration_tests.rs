@@ -4,7 +4,7 @@ use std::process::Command;
 #[test]
 fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("ric")?;
-    cmd.args(["--", "echo \"Hello, world!\""]);
+    cmd.args(["--", "ls", "/tmp/cwd/"]);
 
     let output = cmd.output().expect("Failed to get output");
     let stderr = &output.stderr;

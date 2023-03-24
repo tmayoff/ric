@@ -9,4 +9,8 @@ edition = "2021"
 assert_cmd = "2.0.10"
 clap = "4.1.11"
 docker-api = "0.13.0"
+env_logger = "0.10.0"
+futures-util = "0.3.27"
+log = "0.4.17"
+thiserror = "1.0.40"
 tokio = { version = "1.26.0", features = ["full"] }
