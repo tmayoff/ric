@@ -120,6 +120,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .expect("Failed to wait for container");
 
+
     container.remove(&Default::default()).await?;
 
     Ok(())
