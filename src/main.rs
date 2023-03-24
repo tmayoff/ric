@@ -1,62 +1,49 @@
-use std::ffi::OsString;
-
+use clap::Parser;
 use docker_api::opts::{ContainerCreateOpts, LogsOpts};
 use futures_util::stream::StreamExt;
 
-#[derive(thiserror::Error, Debug)]
-enum Error {
-    #[error("Missing commnd after --")]
-    MissingCommand,
-}
+#[derive(Parser, Debug)]
+struct Args {
+    #[arg(short, long)]
+    image: String,
 
-struct Input {
-    args: Vec<String>,
+    #[arg(short, long)]
+    container: Option<String>,
+
+    #[arg(short, long)]
+    mounts: Option<Vec<String>>,
+
+    #[arg(last = true)]
     command: Vec<String>,
-}
-
-async fn parse_input() -> Result<Input, Error> {
-    let mut args: Vec<String> = std::env::args_os()
-        .map(|s| s.into_string().expect("Failed to decode input"))
-        .collect();
-
-    let _executable_path = args.first().expect("No executable path");
-    log::debug!("Executable path: {:?}", _executable_path);
-
-    if !args.contains(&String::from("--")) {
-        return Err(Error::MissingCommand);
-    }
-
-    let command = args
-        .split_off(args.iter().position(|s| s == "--").unwrap() + 1)
-        .iter()
-        .map(|s| s.to_owned())
-        .collect::<Vec<String>>();
-    args.remove(args.len() - 1);
-
-    log::debug!("Args {:?}", args);
-    log::debug!("Command {:?}", command);
-
-    Ok(Input { args, command })
 }
 
 #[tokio::main]
 async fn main() {
     env_logger::init();
 
-    let input = parse_input().await;
-    if let Err(e) = input {
-        log::error!("{:?}", e);
+    let args = Args::parse();
+    let current_dir = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    if args.command.is_empty() {
+        log::warn!("Command is empty, finishing early");
         return;
     }
-    let input = input.unwrap();
 
     let docker =
-        docker_api::Docker::new("unix:///var/run/docker.sock").expect("Needs docker container");
+        docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
+
+    let mut mounts = args.mounts.unwrap_or_default();
+    mounts.push(format!("{}:/tmp", current_dir));
+
+    log::debug!("{:?}", mounts);
 
     let container_opts = ContainerCreateOpts::builder()
-        .image("debian:bookworm")
-        .volumes(["/home/tyler/src/ric/:/tmp/cwd"])
-        .command(input.command)
+        .image(args.image)
+        .volumes(mounts)
+        .command(args.command)
         .build();
 
     let container = docker
