@@ -90,6 +90,27 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .expect("Failed to create container");
 
+    let container_id = Some(container.id().clone());
+    ctrlc::set_handler(move || {
+        log::info!("Stopping container");
+        let mut container_id = container_id.clone();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let res = docker
+                    .containers()
+                    .get(container_id.take().unwrap())
+                    .kill(None)
+                    .await;
+
+                if let Err(e) = res {
+                    log::error!("Failed to stop container {}", e)
+                }
+            });
+    })?;
+
     container.start().await?;
 
     log::debug!("Started container");
