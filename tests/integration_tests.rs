@@ -4,7 +4,7 @@ use std::process::Command;
 #[test]
 fn simple_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("ric")?;
-    cmd.args(["--image", "debian:bookworm", "--", "ls", "/tmp/"]);
+    cmd.args(["--image", "debian", "--", "ls", "/tmp/"]);
 
     let output = cmd.output().expect("Failed to get output");
     let stderr = &output.stderr;

@@ -1,6 +1,10 @@
 use clap::Parser;
-use docker_api::opts::{ContainerCreateOpts, LogsOpts};
+use docker_api::{
+    opts::{ContainerCreateOpts, LogsOpts, PullOpts},
+    Docker,
+};
 use futures_util::stream::StreamExt;
+use std::error::Error;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -17,8 +21,40 @@ struct Args {
     command: Vec<String>,
 }
 
+fn append_tag(image: &str) -> String {
+    if image.contains(':') {
+        image.to_string()
+    } else {
+        format!("{}:latest", image)
+    }
+}
+
+async fn pull_if_needed(docker: &Docker, image: &str) -> Result<(), Box<dyn Error>> {
+    let images = docker.images();
+
+    for i in images.list(&Default::default()).await?.into_iter() {
+        let image = append_tag(image);
+        if i.repo_tags.contains(&image) {
+            log::debug!("Image already downloaded");
+            return Ok(());
+        }
+    }
+
+    log::debug!("Pulling image");
+    let mut stream = images.pull(&PullOpts::builder().image(image).build());
+
+    while let Some(pull_result) = stream.next().await {
+        match pull_result {
+            Ok(output) => log::info!("{output:?}"),
+            Err(e) => log::error!("{e}"),
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let args = Args::parse();
@@ -29,11 +65,14 @@ async fn main() {
 
     if args.command.is_empty() {
         log::warn!("Command is empty, finishing early");
-        return;
+        return Ok(());
     }
 
-    let docker =
+    let mut docker =
         docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
+    docker.adjust_api_version().await?;
+
+    pull_if_needed(&docker, &args.image).await?;
 
     let mut mounts = args.mounts.unwrap_or_default();
     mounts.push(format!("{}:/tmp", current_dir));
@@ -80,4 +119,8 @@ async fn main() {
         .wait()
         .await
         .expect("Failed to wait for container");
+
+    container.remove(&Default::default()).await?;
+
+    Ok(())
 }
