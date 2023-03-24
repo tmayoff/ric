@@ -63,6 +63,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .to_string_lossy()
         .to_string();
 
+    let current_uid = users::get_current_uid();
+    let current_gid = users::get_current_gid();
+    let current_user = format!("{}:{}", current_uid, current_gid);
+
     if args.command.is_empty() {
         log::warn!("Command is empty, finishing early");
         return Ok(());
@@ -82,6 +86,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .volumes(mounts)
         .working_dir("/tmp")
         .command(args.command)
+        .user(current_user)
+        .auto_remove(true)
         .build();
 
     let container = docker
