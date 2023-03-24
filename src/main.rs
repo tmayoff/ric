@@ -87,7 +87,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .working_dir("/tmp")
         .command(args.command)
         .user(current_user)
-        .auto_remove(true)
         .build();
 
     let container = docker
