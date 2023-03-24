@@ -1,6 +1,7 @@
 use clap::Parser;
 use docker_api::opts::{ContainerCreateOpts, LogsOpts};
 use futures_util::stream::StreamExt;
+use std::error::Error;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -18,7 +19,7 @@ struct Args {
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let args = Args::parse();
@@ -29,11 +30,12 @@ async fn main() {
 
     if args.command.is_empty() {
         log::warn!("Command is empty, finishing early");
-        return;
+        return Ok(());
     }
 
-    let docker =
+    let mut docker =
         docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
+    docker.adjust_api_version().await?;
 
     let mut mounts = args.mounts.unwrap_or_default();
     mounts.push(format!("{}:/tmp", current_dir));
@@ -80,4 +82,6 @@ async fn main() {
         .wait()
         .await
         .expect("Failed to wait for container");
+
+    Ok(())
 }
