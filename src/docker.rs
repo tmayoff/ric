@@ -60,7 +60,7 @@ async fn start_container(
     let container_opts = ContainerCreateOpts::builder()
         .image(image)
         .volumes(mounts)
-        .working_dir("/tmp")
+        .working_dir("/mnt")
         .command(command)
         .user(current_user)
         .build();
@@ -81,7 +81,7 @@ pub async fn runner(docker: &docker_api::Docker, args: Args) -> Result<(), anyho
         .to_string_lossy()
         .to_string();
 
-    mounts.push(format!("{}:/tmp", current_dir));
+    mounts.push(format!("{}:/mnt", current_dir));
 
     if let Some(image) = args.image {
         let container = start_container(docker, &image, command, mounts).await?;
