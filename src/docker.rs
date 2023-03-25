@@ -1,7 +1,11 @@
 use futures_util::stream::StreamExt;
-use std::error::Error;
 
-use docker_api::{opts::PullOpts, Docker};
+use docker_api::{
+    opts::{ContainerCreateOpts, PullOpts},
+    Docker,
+};
+
+use crate::{setup_signal_handler, Args};
 
 fn append_tag(image: &str) -> String {
     if image.contains(':') {
@@ -18,7 +22,7 @@ pub async fn cleanup_container(container: &docker_api::Container) {
     }
 }
 
-pub async fn pull_if_needed(docker: &Docker, image: &str) -> Result<(), Box<dyn Error>> {
+pub async fn pull_if_needed(docker: &Docker, image: &str) -> Result<(), anyhow::Error> {
     let images = docker.images();
 
     for i in images.list(&Default::default()).await?.into_iter() {
@@ -40,4 +44,39 @@ pub async fn pull_if_needed(docker: &Docker, image: &str) -> Result<(), Box<dyn 
     }
 
     Ok(())
+}
+
+pub async fn runner(
+    docker: &docker_api::Docker,
+    args: Args,
+) -> Result<docker_api::Container, anyhow::Error> {
+    let current_dir = std::env::current_dir()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+
+    let current_user = format!("{}:{}", users::get_current_uid(), users::get_current_gid());
+
+    let mut mounts = args.mounts.unwrap_or_default();
+    mounts.push(format!("{}:/tmp", current_dir));
+
+    let container_opts = ContainerCreateOpts::builder()
+        .image(args.image)
+        .volumes(mounts)
+        .working_dir("/tmp")
+        .command(args.command)
+        .user(current_user)
+        .build();
+
+    let container = docker
+        .containers()
+        .create(&container_opts)
+        .await
+        .expect("Failed to create container");
+
+    setup_signal_handler(container.id().clone(), docker.clone())?;
+
+    container.start().await?;
+
+    Ok(container)
 }

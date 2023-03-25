@@ -1,12 +1,12 @@
 use clap::Parser;
-use docker_api::opts::{ContainerCreateOpts, LogsOpts};
-use futures_util::stream::StreamExt;
+use docker_api::opts::LogsOpts;
+use futures_util::StreamExt;
 use std::error::Error;
 
 mod docker;
 
 #[derive(Parser, Debug)]
-struct Args {
+pub struct Args {
     #[arg(short, long)]
     image: String,
 
@@ -49,13 +49,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let args = Args::parse();
 
-    let current_dir = std::env::current_dir()
-        .unwrap()
-        .to_string_lossy()
-        .to_string();
-
-    let current_user = format!("{}:{}", users::get_current_uid(), users::get_current_gid());
-
     if args.command.is_empty() {
         log::warn!("No command was specified, finishing early");
         return Ok(());
@@ -67,29 +60,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     docker::pull_if_needed(&docker, &args.image).await?;
 
-    let mut mounts = args.mounts.unwrap_or_default();
-    mounts.push(format!("{}:/tmp", current_dir));
-
-    let container_opts = ContainerCreateOpts::builder()
-        .image(args.image)
-        .volumes(mounts)
-        .working_dir("/tmp")
-        .command(args.command)
-        .user(current_user)
-        .build();
-
-    let container = docker
-        .containers()
-        .create(&container_opts)
-        .await
-        .expect("Failed to create container");
-
-    if let Err(e) = setup_signal_handler(container.id().clone(), docker) {
-        log::error!("Failed to setup error handler exiting early ({})", e);
-        return Ok(());
-    }
-
-    container.start().await?;
+    let container = docker::runner(&docker, args).await?;
 
     log::debug!("Started container");
 
