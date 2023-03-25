@@ -1,14 +1,12 @@
+use anyhow::bail;
 use clap::Parser;
-use docker_api::opts::LogsOpts;
-use futures_util::StreamExt;
-use std::error::Error;
 
 mod docker;
 
 #[derive(Parser, Debug)]
 pub struct Args {
     #[arg(short, long)]
-    image: String,
+    image: Option<String>,
 
     #[arg(short, long)]
     container: Option<String>,
@@ -44,7 +42,7 @@ fn setup_signal_handler(
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     let args = Args::parse();
@@ -54,40 +52,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
         return Ok(());
     }
 
+    if args.image.is_none() && args.container.is_none() {
+        bail!("Must provide either an image or a container to use");
+    }
+
     let mut docker =
         docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
     docker.adjust_api_version().await?;
 
-    docker::pull_if_needed(&docker, &args.image).await?;
-
-    let container = docker::runner(&docker, args).await?;
-
-    log::debug!("Started container");
-
-    let mut logs = container.logs(
-        &LogsOpts::builder()
-            .follow(true)
-            .stdout(true)
-            .stderr(true)
-            .build(),
-    );
-    while let Some(logs) = logs.next().await {
-        let log = match logs? {
-            docker_api::conn::TtyChunk::StdOut(s) => s,
-            docker_api::conn::TtyChunk::StdErr(e) => e,
-            docker_api::conn::TtyChunk::StdIn(e) => e,
-        };
-
-        let log = String::from_utf8_lossy(&log).to_string();
-        print!("{}", log);
+    if let Some(image) = &args.image {
+        docker::pull_if_needed(&docker, image).await?;
     }
 
-    if let Err(e) = container.wait().await {
-        log::error!("Failed to wait for container {}", e);
-        docker::cleanup_container(&container).await;
-    }
-
-    docker::cleanup_container(&container).await;
+    docker::runner(&docker, args).await?;
 
     Ok(())
 }
