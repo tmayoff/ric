@@ -53,6 +53,25 @@ fn cat_test() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn root_test() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("ric")?;
+    cmd.args(["--image", "debian", "--root", "--", "whoami"]);
+    cmd.assert().success();
+
+    let got_output = get_output(&cmd.output()?);
+    assert!(!got_output.is_empty());
+
+    let expected_output = String::from("root\n");
+
+    println!("Got: {}", got_output);
+    println!("Expected: {}", expected_output);
+
+    assert!(expected_output == got_output);
+
+    Ok(())
+}
+
+#[test]
 fn env_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("ric")?;
     cmd.env("RIC_IMAGE", "debian");
