@@ -1,5 +1,6 @@
 use assert_cmd::prelude::*;
 use docker_api::opts::ContainerCreateOpts;
+use futures_util::StreamExt;
 use std::process::{Command, Output};
 
 fn get_output(output: &Output) -> String {
@@ -58,6 +59,16 @@ async fn existing_container() -> Result<(), Box<dyn std::error::Error>> {
     let mut docker =
         docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
     docker.adjust_api_version().await?;
+
+    let images = docker.images();
+    let mut stream = images.pull(&docker_api::opts::PullOpts::builder().image(image).build());
+
+    while let Some(pull_result) = stream.next().await {
+        match pull_result {
+            Ok(output) => log::info!("{output:?}"),
+            Err(e) => log::error!("{e}"),
+        }
+    }
 
     let opts = ContainerCreateOpts::builder()
         .image(image)
