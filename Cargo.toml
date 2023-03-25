@@ -5,6 +5,8 @@ edition = "2021"
 description = "A simple tool to run commands inside a container"
 license-file = "LICENSE"
 authors = ["Tyler Mayoff"]
+repository = "https://github.com/tmayoff/ric"
+homepage = "https://github.com/tmayoff/ric"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
