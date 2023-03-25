@@ -1,10 +1,9 @@
 use clap::Parser;
-use docker_api::{
-    opts::{ContainerCreateOpts, LogsOpts, PullOpts},
-    Docker,
-};
+use docker_api::opts::{ContainerCreateOpts, LogsOpts};
 use futures_util::stream::StreamExt;
 use std::error::Error;
+
+mod docker;
 
 #[derive(Parser, Debug)]
 struct Args {
@@ -21,36 +20,27 @@ struct Args {
     command: Vec<String>,
 }
 
-fn append_tag(image: &str) -> String {
-    if image.contains(':') {
-        image.to_string()
-    } else {
-        format!("{}:latest", image)
-    }
-}
+fn setup_signal_handler(
+    container_id: docker_api::Id,
+    docker: docker_api::Docker,
+) -> Result<(), ctrlc::Error> {
+    let container_id = Some(container_id);
+    ctrlc::set_handler(move || {
+        log::info!("Stopping container");
+        let mut container_id = container_id.clone();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let container = docker.containers().get(container_id.take().unwrap());
+                if let Err(e) = container.kill(None).await {
+                    log::error!("Failed to stop container {}", e)
+                }
 
-async fn pull_if_needed(docker: &Docker, image: &str) -> Result<(), Box<dyn Error>> {
-    let images = docker.images();
-
-    for i in images.list(&Default::default()).await?.into_iter() {
-        let image = append_tag(image);
-        if i.repo_tags.contains(&image) {
-            log::debug!("Image already downloaded");
-            return Ok(());
-        }
-    }
-
-    log::debug!("Pulling image");
-    let mut stream = images.pull(&PullOpts::builder().image(image).build());
-
-    while let Some(pull_result) = stream.next().await {
-        match pull_result {
-            Ok(output) => log::info!("{output:?}"),
-            Err(e) => log::error!("{e}"),
-        }
-    }
-
-    Ok(())
+                docker::cleanup_container(&container).await;
+            });
+    })
 }
 
 #[tokio::main]
@@ -58,17 +48,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();
 
     let args = Args::parse();
+
     let current_dir = std::env::current_dir()
         .unwrap()
         .to_string_lossy()
         .to_string();
 
-    let current_uid = users::get_current_uid();
-    let current_gid = users::get_current_gid();
-    let current_user = format!("{}:{}", current_uid, current_gid);
+    let current_user = format!("{}:{}", users::get_current_uid(), users::get_current_gid());
 
     if args.command.is_empty() {
-        log::warn!("Command is empty, finishing early");
+        log::warn!("No command was specified, finishing early");
         return Ok(());
     }
 
@@ -76,7 +65,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
     docker.adjust_api_version().await?;
 
-    pull_if_needed(&docker, &args.image).await?;
+    docker::pull_if_needed(&docker, &args.image).await?;
 
     let mut mounts = args.mounts.unwrap_or_default();
     mounts.push(format!("{}:/tmp", current_dir));
@@ -95,26 +84,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .await
         .expect("Failed to create container");
 
-    let container_id = Some(container.id().clone());
-    ctrlc::set_handler(move || {
-        log::info!("Stopping container");
-        let mut container_id = container_id.clone();
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap()
-            .block_on(async {
-                let res = docker
-                    .containers()
-                    .get(container_id.take().unwrap())
-                    .kill(None)
-                    .await;
-
-                if let Err(e) = res {
-                    log::error!("Failed to stop container {}", e)
-                }
-            });
-    })?;
+    if let Err(e) = setup_signal_handler(container.id().clone(), docker) {
+        log::error!("Failed to setup error handler exiting early ({})", e);
+        return Ok(());
+    }
 
     container.start().await?;
 
@@ -134,18 +107,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
             docker_api::conn::TtyChunk::StdIn(e) => e,
         };
 
-        print!(
-            "{}",
-            String::from_utf8(log).expect("Failed to convert to utf8")
-        );
+        let log = String::from_utf8_lossy(&log).to_string();
+        print!("{}", log);
     }
 
-    container
-        .wait()
-        .await
-        .expect("Failed to wait for container");
+    if let Err(e) = container.wait().await {
+        log::error!("Failed to wait for container {}", e);
+        docker::cleanup_container(&container).await;
+    }
 
-    container.remove(&Default::default()).await?;
+    docker::cleanup_container(&container).await;
 
     Ok(())
 }
