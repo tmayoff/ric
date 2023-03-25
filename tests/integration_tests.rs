@@ -62,27 +62,14 @@ async fn existing_container() -> Result<(), Box<dyn std::error::Error>> {
     let opts = ContainerCreateOpts::builder()
         .image(image)
         .name("run_in_container")
-        .command(vec![
-            "touch",
-            "/home/helloworld.txt",
-            "&&",
-            "tail",
-            "-f",
-            "/dev/null",
-        ])
+        .command(vec!["tail", "-f", "/dev/null"])
         .auto_remove(true)
         .build();
     let container = docker.containers().create(&opts).await?;
     container.start().await?;
 
     let mut cmd = Command::cargo_bin("ric")?;
-    cmd.args([
-        "--container",
-        "run_in_container",
-        "--",
-        "cat",
-        "/home/helloworld.txt",
-    ]);
+    cmd.args(["--container", "run_in_container", "--", "ls", "/"]);
     cmd.assert().success();
 
     let got_output = get_output(&cmd.output()?);
