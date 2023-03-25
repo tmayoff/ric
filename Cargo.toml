@@ -13,7 +13,7 @@ homepage = "https://github.com/tmayoff/ric"
 [dependencies]
 anyhow = "1.0.70"
 assert_cmd = "2.0.10"
-clap = { version = "4.1.11", features = ["derive"] }
+clap = { version = "4.1.11", features = ["derive", "env"] }
 ctrlc = { version = "3.2.5", features = ["termination"] }
 docker-api = "0.12.1"
 env_logger = "0.10.0"
