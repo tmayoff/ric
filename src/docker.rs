@@ -54,20 +54,18 @@ async fn start_container(
     image: &str,
     command: Vec<String>,
     mounts: Vec<String>,
+    user: &str,
 ) -> Result<docker_api::Container, anyhow::Error> {
-    let current_user = format!("{}:{}", users::get_current_uid(), users::get_current_gid());
-
     let container_opts = ContainerCreateOpts::builder()
         .image(image)
         .volumes(mounts)
         .working_dir("/tmp")
-        .command(command)
-        .user(current_user)
-        .build();
+        .user(user)
+        .command(command);
 
     Ok(docker
         .containers()
-        .create(&container_opts)
+        .create(&container_opts.build())
         .await
         .expect("Failed to create container"))
 }
@@ -81,10 +79,16 @@ pub async fn runner(docker: &docker_api::Docker, args: Args) -> Result<(), anyho
         .to_string_lossy()
         .to_string();
 
+    let user = if args.root {
+        String::from("0:0")
+    } else {
+        format!("{}:{}", users::get_current_uid(), users::get_current_gid())
+    };
+
     mounts.push(format!("{}:/tmp", current_dir));
 
     if let Some(image) = args.image {
-        let container = start_container(docker, &image, command, mounts).await?;
+        let container = start_container(docker, &image, command, mounts, &user).await?;
 
         setup_signal_handler(container.id().clone(), docker.clone())?;
 
@@ -132,6 +136,7 @@ pub async fn runner(docker: &docker_api::Docker, args: Args) -> Result<(), anyho
         let mut logs = container.exec(
             &ExecCreateOpts::builder()
                 .command(args.command)
+                .user(user)
                 .attach_stdout(true)
                 .build(),
         );

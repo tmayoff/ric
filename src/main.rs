@@ -14,6 +14,9 @@ pub struct Args {
     #[arg(short, long, env = "RIC_MOUNTS")]
     mounts: Option<Vec<String>>,
 
+    #[arg(short, long)]
+    root: bool,
+
     #[arg(last = true)]
     command: Vec<String>,
 }
