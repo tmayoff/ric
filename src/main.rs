@@ -3,15 +3,15 @@ use clap::Parser;
 
 mod docker;
 
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 pub struct Args {
-    #[arg(short, long)]
+    #[arg(short, long, env = "RIC_IMAGE")]
     image: Option<String>,
 
-    #[arg(short, long)]
+    #[arg(short, long, env = "RIC_CONTAINER")]
     container: Option<String>,
 
-    #[arg(short, long)]
+    #[arg(short, long, env = "RIC_MOUNTS")]
     mounts: Option<Vec<String>>,
 
     #[arg(last = true)]
