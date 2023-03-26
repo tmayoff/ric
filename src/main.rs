@@ -48,12 +48,18 @@ fn setup_signal_handler(
 async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
-    let args = Args::parse();
+    let mut args = Args::parse();
 
     if args.command.is_empty() {
         log::warn!("No command was specified, finishing early");
         return Ok(());
     }
+
+    args.command = vec![
+        "/bin/sh".to_string(),
+        "-c".to_string(),
+        args.command.join(" "),
+    ];
 
     if args.image.is_none() && args.container.is_none() {
         bail!("Must provide either an image or a container to use");
