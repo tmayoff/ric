@@ -53,6 +53,35 @@ fn cat_test() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[test]
+fn one_long_command_test() -> Result<(), Box<dyn std::error::Error>> {
+    let mut cmd = Command::cargo_bin("ric")?;
+    cmd.args([
+        "--image",
+        "debian",
+        "--root",
+        "--",
+        r#"ls | wc -l && echo "Hello World""#,
+    ]);
+    cmd.assert().success();
+
+    let got_output = get_output(&cmd.output()?);
+    assert!(!got_output.is_empty());
+
+    let mut expected_cmd = Command::new("/bin/sh");
+    expected_cmd.args(["-c", "ls | wc -l"]);
+    expected_cmd.assert().success();
+    let mut expected_output = get_output(&expected_cmd.output()?);
+    expected_output.push_str("Hello World\n");
+
+    println!("Got: {}", got_output);
+    println!("Expected: {}", expected_output);
+
+    assert!(expected_output == got_output);
+
+    Ok(())
+}
+
+#[test]
 fn root_test() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("ric")?;
     cmd.args(["--image", "debian", "--root", "--", "whoami"]);
