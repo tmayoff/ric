@@ -124,41 +124,43 @@ fn env_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn existing_container() -> Result<(), Box<dyn std::error::Error>> {
-    let image = "debian";
+#[test]
+fn existing_container() -> Result<(), Box<dyn std::error::Error>> {
+    async_std::task::block_on(async {
+        let image = "debian";
 
-    let mut docker =
-        docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
-    docker.adjust_api_version().await?;
+        let mut docker =
+            docker_api::Docker::new("unix:///var/run/docker.sock").expect("Docker must be running");
+        docker.adjust_api_version().await?;
 
-    let images = docker.images();
-    let mut stream = images.pull(&docker_api::opts::PullOpts::builder().image(image).build());
+        let images = docker.images();
+        let mut stream = images.pull(&docker_api::opts::PullOpts::builder().image(image).build());
 
-    while let Some(pull_result) = stream.next().await {
-        match pull_result {
-            Ok(output) => log::info!("{output:?}"),
-            Err(e) => log::error!("{e}"),
+        while let Some(pull_result) = stream.next().await {
+            match pull_result {
+                Ok(output) => log::info!("{output:?}"),
+                Err(e) => log::error!("{e}"),
+            }
         }
-    }
 
-    let opts = ContainerCreateOpts::builder()
-        .image(image)
-        .name("run_in_container")
-        .command(vec!["tail", "-f", "/dev/null"])
-        .auto_remove(true)
-        .build();
-    let container = docker.containers().create(&opts).await?;
-    container.start().await?;
+        let opts = ContainerCreateOpts::builder()
+            .image(image)
+            .name("run_in_container")
+            .command(vec!["tail", "-f", "/dev/null"])
+            .auto_remove(true)
+            .build();
+        let container = docker.containers().create(&opts).await?;
+        container.start().await?;
 
-    let mut cmd = Command::cargo_bin("ric")?;
-    cmd.args(["--container", "run_in_container", "--", "ls", "/"]);
-    cmd.assert().success();
+        let mut cmd = Command::cargo_bin("ric")?;
+        cmd.args(["--container", "run_in_container", "--", "ls", "/"]);
+        cmd.assert().success();
 
-    let got_output = get_output(&cmd.output()?);
-    assert!(!got_output.is_empty());
+        let got_output = get_output(&cmd.output()?);
+        assert!(!got_output.is_empty());
 
-    container.kill(None).await?;
+        container.kill(None).await?;
 
-    Ok(())
+        Ok(())
+    })
 }
