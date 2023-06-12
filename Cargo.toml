@@ -16,7 +16,7 @@ assert_cmd = "2.0.10"
 async-std = { version = "1.12.0", features = ["tokio1"] }
 clap = { version = "4.1.11", features = ["derive", "env"] }
 ctrlc = { version = "3.2.5", features = ["termination"] }
-docker-api = "0.12.1"
+docker-api = "0.14.0"
 env_logger = "0.10.0"
 futures-util = "0.3.27"
 log = "0.4.17"
